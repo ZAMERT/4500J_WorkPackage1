@@ -1,0 +1,4 @@
+.env
+rapid_docs/
+rapid_chroma_db/
+__pycache__/
