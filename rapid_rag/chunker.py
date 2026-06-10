@@ -88,3 +88,89 @@ def build_records(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 2
                     )
 
     return ids, docs, metadatas
+
+
+# --- Segmented indexing (3 collections) ---
+
+_S1 = {"Usage", "Arguments", "Program execution", "Error handling",
+       "Return value", "Description", "Limitations", "Limitation",
+       "Characteristics", "Components", "Structure"}
+_S2 = {"Syntax", "Predefined data"}
+_S3 = {"Basic examples", "Basic example", "More examples",
+       "Examples", "Example", "Type examples"}
+_SKIP = {"Related information", "Related Information", "About this manual",
+         "Revisions", "Prerequisites", "Organization of chapters",
+         "Who should read this manual?"}
+
+
+def _classify(section: str) -> str | None:
+    if section in _SKIP or not section:
+        return None
+    if section in _S1:
+        return "s1"
+    if section in _S2:
+        return "s2"
+    if section in _S3:
+        return "s3"
+    return "s1"  # unknown sections default to definitions
+
+
+def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 250) -> dict:
+    """Returns {"s1": (ids, docs, metadatas), "s2": ..., "s3": ...}"""
+    segments: dict[str, tuple[list, list, list]] = {
+        "s1": ([], [], []),
+        "s2": ([], [], []),
+        "s3": ([], [], []),
+    }
+
+    for manual in manuals:
+        language = manual["language"]
+        manual_dir = Path(manual["manual_dir"])
+        manual_name = manual["manual_name"]
+        toc_titles = parse_toc(manual_dir / "toc.hhc")
+        files = html_files(manual_dir)
+        print(f"{language}/{manual_name}: found {len(files)} HTML files")
+
+        for html_file in files:
+            rel_file = html_file.relative_to(manual_dir).as_posix()
+            toc_title = toc_titles.get(html_file.name)
+            try:
+                sections = html_to_sections(html_file, toc_title)
+            except Exception as exc:
+                print(f"Skipping unreadable file {html_file}: {exc}")
+                continue
+
+            for section_info in sections:
+                title = section_info["title"]
+                section = section_info["section"]
+                seg = _classify(section)
+                if seg is None:
+                    continue
+
+                ids, docs, metadatas = segments[seg]
+                chunks = split_text(section_info["text"], max_chars=chunk_chars, overlap=overlap)
+                for chunk_index, chunk in enumerate(chunks):
+                    doc = (
+                        f"Manual: ABB RAPID\n"
+                        f"Language: {language}\n"
+                        f"Title: {title}\n"
+                        f"Section: {section}\n\n"
+                        f"{chunk}"
+                    )
+                    ids.append(stable_id(language, manual_name, rel_file, section, str(chunk_index)))
+                    docs.append(doc)
+                    metadatas.append({
+                        "language": language,
+                        "manual": manual_name,
+                        "title": title,
+                        "section": section,
+                        "file": rel_file,
+                        "path": str(html_file),
+                        "chunk_id": chunk_index,
+                        "segment": seg,
+                        "doc_version": "RobotWare 7.10",
+                    })
+
+    for seg, (ids, docs, _) in segments.items():
+        print(f"Segment {seg}: {len(docs)} chunks")
+    return segments

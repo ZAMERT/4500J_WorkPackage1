@@ -1,4 +1,10 @@
 .env
 rapid_docs/
 rapid_chroma_db/
+rapid_chroma_db_segmented/
+*.rspak
+*.chm
 __pycache__/
+**/__pycache__/
+*.pyc
+
