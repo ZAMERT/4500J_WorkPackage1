@@ -58,6 +58,7 @@ class RapidRetriever:
                 metadata.get("manual"),
                 metadata.get("file"),
                 metadata.get("section"),
+                metadata.get("section_instance", 0),
                 metadata.get("chunk_id"),
             )
             current = deduped.get(key)
@@ -134,7 +135,13 @@ class SegmentedRetriever:
         deduped = {}
         for item in all_candidates:
             meta = item["metadata"] or {}
-            key = (meta.get("language"), meta.get("file"), meta.get("section"), meta.get("chunk_id"))
+            key = (
+                meta.get("language"),
+                meta.get("file"),
+                meta.get("section"),
+                meta.get("section_instance", 0),
+                meta.get("chunk_id"),
+            )
             if key not in deduped or item["distance"] < deduped[key]["distance"]:
                 deduped[key] = item
 
