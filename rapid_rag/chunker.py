@@ -58,9 +58,12 @@ def build_records(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 2
                 print(f"Skipping unreadable file {html_file}: {exc}")
                 continue
 
+            section_counts = {}
             for section_info in sections:
                 title = section_info["title"]
                 section = section_info["section"]
+                section_instance = section_counts.get(section, 0)
+                section_counts[section] = section_instance + 1
                 chunks = split_text(section_info["text"], max_chars=chunk_chars, overlap=overlap)
                 for chunk_index, chunk in enumerate(chunks):
                     doc = (
@@ -72,7 +75,7 @@ def build_records(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 2
                         f"Source file: {rel_file}\n\n"
                         f"{chunk}"
                     )
-                    ids.append(stable_id(language, manual_name, rel_file, section, str(chunk_index)))
+                    ids.append(stable_id(language, manual_name, rel_file, section, str(section_instance), str(chunk_index)))
                     docs.append(doc)
                     metadatas.append(
                         {
@@ -82,6 +85,7 @@ def build_records(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 2
                             "section": section,
                             "file": rel_file,
                             "path": str(html_file),
+                            "section_instance": section_instance,
                             "chunk_id": chunk_index,
                             "doc_version": "RobotWare 7.10",
                         }
@@ -140,9 +144,12 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
                 print(f"Skipping unreadable file {html_file}: {exc}")
                 continue
 
+            section_counts = {}
             for section_info in sections:
                 title = section_info["title"]
                 section = section_info["section"]
+                section_instance = section_counts.get(section, 0)
+                section_counts[section] = section_instance + 1
                 seg = _classify(section)
                 if seg is None:
                     continue
@@ -157,7 +164,7 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
                         f"Section: {section}\n\n"
                         f"{chunk}"
                     )
-                    ids.append(stable_id(language, manual_name, rel_file, section, str(chunk_index)))
+                    ids.append(stable_id(language, manual_name, rel_file, section, str(section_instance), str(chunk_index)))
                     docs.append(doc)
                     metadatas.append({
                         "language": language,
@@ -166,6 +173,7 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
                         "section": section,
                         "file": rel_file,
                         "path": str(html_file),
+                        "section_instance": section_instance,
                         "chunk_id": chunk_index,
                         "segment": seg,
                         "doc_version": "RobotWare 7.10",

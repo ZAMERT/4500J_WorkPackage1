@@ -31,6 +31,7 @@ def reciprocal_rank_fusion(
                 meta.get("language", ""),
                 meta.get("file", ""),
                 meta.get("section", ""),
+                str(meta.get("section_instance", 0)),
                 str(meta.get("chunk_id", item.get("document", "")[:80])),
             )
             key_str = "::".join(key)

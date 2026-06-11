@@ -24,7 +24,11 @@ def _build_corpus(manuals: List[dict]) -> tuple[list[str], list[dict]]:
             except Exception:
                 continue
 
+            section_counts = {}
             for section_info in sections:
+                section = section_info["section"]
+                section_instance = section_counts.get(section, 0)
+                section_counts[section] = section_instance + 1
                 text = section_info["text"].strip()
                 if len(text) < 50:
                     continue
@@ -34,6 +38,7 @@ def _build_corpus(manuals: List[dict]) -> tuple[list[str], list[dict]]:
                     "manual": manual_name,
                     "title": section_info["title"],
                     "section": section_info["section"],
+                    "section_instance": section_instance,
                     "file": rel_file,
                 })
 
