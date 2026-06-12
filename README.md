@@ -1,10 +1,10 @@
 # RAPID RAG — ABB Robot Code Generation with Retrieval-Augmented Generation
 
 ## Overview
-RAG pipeline that retrieves relevant ABB RAPID manual sections and generates
+RAG pipeline that retrieves relevant ABB RAPID manual knowledge and generates
 valid RAPID code via an LLM. Two retrieval modes are supported: a baseline
-single-collection vector search, and an improved hybrid search over three
-semantically segmented collections.
+single-collection vector search, and an improved hybrid search that combines
+segmented section retrieval with instruction-level canonical knowledge cards.
 
 ---
 
@@ -57,11 +57,31 @@ python build_rapid_index.py \
 
 Output: `rapid_chroma_db/` — collection `rapid_manual`
 
-#### Option B — Segmented (three collections, recommended)
+#### Option B — Segmented + canonical cards (recommended)
 
 Before indexing, each section is classified by its `blocklabel` type and routed
 to a dedicated collection. This allows the retriever to query the right segment
 depending on what information is needed.
+
+In addition, each RAPID instruction, function, or data type page is aggregated
+into a canonical JSON card. A card keeps the API-level facts together:
+
+```json
+{
+  "instruction": "MoveL",
+  "type": "instruction",
+  "syntax": "...",
+  "arguments": ["..."],
+  "required_context": ["robtarget", "tooldata", "wobjdata"],
+  "examples": ["..."],
+  "related": ["MoveJ", "MoveAbsJ"],
+  "common_errors": ["..."]
+}
+```
+
+This is more useful for code generation than returning disconnected paragraph
+chunks, because syntax, arguments, examples, and error notes from the same API
+page remain bound together.
 
 ```bash
 python build_rapid_index_segmented.py \
@@ -69,16 +89,20 @@ python build_rapid_index_segmented.py \
     --languages en
 ```
 
-Output: `rapid_chroma_db_segmented/` — three collections:
+Output: `rapid_chroma_db_segmented/` — four collections:
 
 | Collection | Blocklabel sections indexed |
 |---|---|
 | `rapid_definitions` | Usage, Arguments, Program execution, Error handling, Return value, Description, Limitations |
 | `rapid_syntax` | Syntax, Predefined data |
 | `rapid_examples` | Basic examples, Basic example, More examples, Examples |
+| `rapid_cards` | Full instruction/data-type cards aggregated from each HTML page |
 
 Sections such as `Related information` are skipped entirely as they contain no
-actionable content.
+actionable content for chunk retrieval. Related instruction names are still
+captured inside cards when present.
+
+To build only the three legacy segmented collections, pass `--no-cards`.
 
 ---
 
@@ -90,18 +114,29 @@ actionable content.
 python generate_rapid.py "move to pick position and close gripper"
 ```
 
-#### Hybrid pipeline (segmented vector + BM25 keyword, merged via RRF)
+#### Hybrid pipeline (segmented vector + BM25 keyword + cards)
 
 ```bash
 python generate_rapid_hybrid.py "move to pick position and close gripper"
 ```
+
+By default, the hybrid retriever:
+
+1. Retrieves candidate sections from `rapid_definitions`, `rapid_syntax`, and
+   `rapid_examples`.
+2. Retrieves keyword candidates from BM25 over the local HTML manual.
+3. Merges candidates with Reciprocal Rank Fusion.
+4. Uses the winning source files to pull complete cards from `rapid_cards`.
+5. Sends card context to the LLM, with chunk fallback if the card collection is
+   missing.
 
 Optional arguments:
 
 ```
 --vector-weight   weight of vector retrieval in RRF merge (default: 1.0)
 --bm25-weight     weight of BM25 retrieval in RRF merge (default: 1.0)
---top-k           number of chunks sent to LLM (default: 6)
+--no-cards        disable card expansion and return chunk context only
+--top-k           number of context items sent to LLM (default: 6)
 --candidate-k     candidates retrieved per retriever before merging (default: 12)
 --language        preferred manual language (default: en)
 ```
@@ -121,7 +156,9 @@ User query
     │
     └─► RRF Fusion (Reciprocal Rank Fusion, rank-based merge)
             │
-            └─► top-6 chunks → DeepSeek LLM → RAPID module output
+            ├─► candidate source files
+            │
+            └─► rapid_cards expansion → top-6 cards/chunks → DeepSeek LLM → RAPID module output
 ```
 
 RRF score formula: `score(d) = Σ weight / (60 + rank(d))` across all retrievers.
@@ -134,19 +171,20 @@ exact RAPID instruction names (e.g. `MoveL`, `WaitDI`, `SetDO`).
 
 ```
 build_rapid_index.py            Build original single-collection vector index
-build_rapid_index_segmented.py  Build segmented three-collection vector index
+build_rapid_index_segmented.py  Build segmented vector index plus rapid_cards
 generate_rapid.py               Generate RAPID code using original pipeline
-generate_rapid_hybrid.py        Generate RAPID code using hybrid retrieval
+generate_rapid_hybrid.py        Generate RAPID code using hybrid card retrieval
 
 rapid_rag/
   loaders.py          Discover HTML manual files from extracted CHM directories
   parser.py           Parse ABB HTML manual structure (blocklabel sections)
   chunker.py          Text splitting, stable ID generation, segment classification
+  cards.py            Build canonical instruction/data-type cards from HTML pages
   embeddings.py       Load BAAI/bge-m3 multilingual embedding model
   vectorstore.py      ChromaDB collection creation and batch write
   retriever.py        RapidRetriever (single collection) + SegmentedRetriever (3 collections)
   bm25_retriever.py   BM25 keyword retriever built on-the-fly from HTML files
-  hybrid_retriever.py RRF fusion of vector and BM25 results
+  hybrid_retriever.py RRF fusion plus card expansion from rapid_cards
   prompts.py          LLM prompt construction from retrieved context
 ```
 

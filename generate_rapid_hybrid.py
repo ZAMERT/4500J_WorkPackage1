@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--candidate-k", type=int, default=12)
     parser.add_argument("--vector-weight", type=float, default=1.0)
     parser.add_argument("--bm25-weight", type=float, default=1.0)
+    parser.add_argument("--no-cards", action="store_true", help="Return chunk context only, even if rapid_cards exists")
     parser.add_argument("--model", default=DEFAULT_LLM_MODEL)
     return parser.parse_args()
 
@@ -53,6 +54,7 @@ def generate_rapid(
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     vector_weight: float = 1.0,
     bm25_weight: float = 1.0,
+    use_cards: bool = True,
     llm_model: str = DEFAULT_LLM_MODEL,
 ) -> Tuple[str, List[dict]]:
     retriever = HybridRetriever(
@@ -61,6 +63,7 @@ def generate_rapid(
         embedding_model=embedding_model,
         vector_weight=vector_weight,
         bm25_weight=bm25_weight,
+        use_cards=use_cards,
     )
     retrieved = retriever.retrieve(
         user_task,
@@ -116,6 +119,7 @@ def main():
         embedding_model=args.embedding_model,
         vector_weight=args.vector_weight,
         bm25_weight=args.bm25_weight,
+        use_cards=not args.no_cards,
         llm_model=args.model,
     )
 
@@ -127,9 +131,11 @@ def main():
         meta = item.get("metadata") or {}
         seg = meta.get("segment", "-")
         rrf = item.get("rrf_score", "-")
+        instruction = meta.get("instruction") or meta.get("title")
+        rrf_text = f"{rrf:.4f}" if isinstance(rrf, float) else str(rrf)
         print(
-            f"{index}. [{seg}] {meta.get('title')} | {meta.get('section')} | "
-            f"file={meta.get('file')} | rrf={rrf:.4f}"
+            f"{index}. [{seg}] {instruction} | {meta.get('section')} | "
+            f"file={meta.get('file')} | rrf={rrf_text}"
         )
 
 
