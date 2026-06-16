@@ -19,7 +19,7 @@ extract the CHM help files into HTML using `7z`.
 unzip ABB.RobotWareDoc.OmniCore-7.10.rspak -d rapid_docs
 
 7z x rapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation/en/3HAC065038_TRM_RAPID_RW_7-en.chm \
-    -o rapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation/en/rapid_manual_html
+    -orapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation/en/rapid_manual_html
 ```
 
 This produces 669 HTML files, one per RAPID instruction or data type.
