@@ -1,10 +1,14 @@
 import hashlib
 import re
+import time
 from pathlib import Path
 from typing import List
 
 from .loaders import html_files
 from .parser import html_to_sections, parse_toc
+
+
+PROGRESS_EVERY_FILES = 100
 
 
 def split_text(text: str, max_chars: int = 1800, overlap: int = 250) -> List[str]:
@@ -133,15 +137,17 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
         manual_name = manual["manual_name"]
         toc_titles = parse_toc(manual_dir / "toc.hhc")
         files = html_files(manual_dir)
-        print(f"{language}/{manual_name}: found {len(files)} HTML files")
+        manual_start = time.monotonic()
+        segment_starts = {seg: len(records[1]) for seg, records in segments.items()}
+        print(f"{language}/{manual_name}: found {len(files)} HTML files", flush=True)
 
-        for html_file in files:
+        for file_index, html_file in enumerate(files, start=1):
             rel_file = html_file.relative_to(manual_dir).as_posix()
             toc_title = toc_titles.get(html_file.name)
             try:
                 sections = html_to_sections(html_file, toc_title)
             except Exception as exc:
-                print(f"Skipping unreadable file {html_file}: {exc}")
+                print(f"Skipping unreadable file {html_file}: {exc}", flush=True)
                 continue
 
             section_counts = {}
@@ -179,6 +185,24 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
                         "doc_version": "RobotWare 7.10",
                     })
 
+            if file_index % PROGRESS_EVERY_FILES == 0 or file_index == len(files):
+                elapsed = time.monotonic() - manual_start
+                segment_counts = ", ".join(
+                    f"{seg}={len(records[1]) - segment_starts[seg]}"
+                    for seg, records in segments.items()
+                )
+                print(
+                    f"  chunk progress: {file_index}/{len(files)} files, "
+                    f"{segment_counts} chunks from this manual, {elapsed:.1f}s elapsed",
+                    flush=True,
+                )
+
+        elapsed = time.monotonic() - manual_start
+        print(
+            f"{language}/{manual_name}: finished chunking {len(files)} files in {elapsed:.1f}s",
+            flush=True,
+        )
+
     for seg, (ids, docs, _) in segments.items():
-        print(f"Segment {seg}: {len(docs)} chunks")
+        print(f"Segment {seg}: {len(docs)} chunks", flush=True)
     return segments
