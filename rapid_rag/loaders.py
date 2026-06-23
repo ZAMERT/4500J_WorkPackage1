@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List
 
 DEFAULT_MANUAL_ROOT = "rapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation"
-DEFAULT_DOC_DIRS = ("rapid_manual_html", "rapid_html")
+DEFAULT_DOC_DIRS = ("rapid_manual_html", "rapid_kernel", "rapid_overview")
 
 
 def discover_manual_dirs(

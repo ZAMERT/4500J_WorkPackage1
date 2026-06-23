@@ -14,6 +14,8 @@ load_dotenv()
 
 DEFAULT_DB_DIR = "rapid_chroma_db_segmented"
 DEFAULT_LLM_MODEL = "deepseek-chat"
+DEFAULT_TOP_K = 8
+DEFAULT_CANDIDATE_K = 18
 
 
 def parse_args():
@@ -27,8 +29,8 @@ def parse_args():
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--language", default="en")
     parser.add_argument("--fallback-language", default="en")
-    parser.add_argument("--top-k", type=int, default=6)
-    parser.add_argument("--candidate-k", type=int, default=12)
+    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    parser.add_argument("--candidate-k", type=int, default=DEFAULT_CANDIDATE_K)
     parser.add_argument("--vector-weight", type=float, default=1.0)
     parser.add_argument("--bm25-weight", type=float, default=1.0)
     parser.add_argument("--model", default=DEFAULT_LLM_MODEL)
@@ -48,8 +50,8 @@ def generate_rapid(
     manuals: list = None,
     language: str = "en",
     fallback_language: str = "en",
-    top_k: int = 6,
-    candidate_k: int = 12,
+    top_k: int = DEFAULT_TOP_K,
+    candidate_k: int = DEFAULT_CANDIDATE_K,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     vector_weight: float = 1.0,
     bm25_weight: float = 1.0,
@@ -128,7 +130,7 @@ def main():
         seg = meta.get("segment", "-")
         rrf = item.get("rrf_score", "-")
         print(
-            f"{index}. [{seg}] {meta.get('title')} | {meta.get('section')} | "
+            f"{index}. [{seg}] {meta.get('manual')} | {meta.get('title')} | {meta.get('section')} | "
             f"file={meta.get('file')} | rrf={rrf:.4f}"
         )
 
