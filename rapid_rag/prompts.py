@@ -4,6 +4,7 @@ def build_context(retrieved: list[dict]) -> str:
         metadata = item["metadata"] or {}
         blocks.append(
             f"[Source {index}]\n"
+            f"Manual directory: {metadata.get('manual')}\n"
             f"Language: {metadata.get('language')}\n"
             f"Title: {metadata.get('title')}\n"
             f"Section: {metadata.get('section')}\n"

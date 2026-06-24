@@ -96,15 +96,45 @@ def build_records(manuals: List[dict], chunk_chars: int = 1800, overlap: int = 2
 
 # --- Segmented indexing (3 collections) ---
 
-_S1 = {"Usage", "Arguments", "Program execution", "Error handling",
-       "Return value", "Description", "Limitations", "Limitation",
-       "Characteristics", "Components", "Structure"}
-_S2 = {"Syntax", "Predefined data"}
-_S3 = {"Basic examples", "Basic example", "More examples",
-       "Examples", "Example", "Type examples"}
-_SKIP = {"Related information", "Related Information", "About this manual",
-         "Revisions", "Prerequisites", "Organization of chapters",
-         "Who should read this manual?"}
+_S1 = {
+    "Usage",
+    "Arguments",
+    "Program execution",
+    "Error handling",
+    "Return value",
+    "Description",
+    "Limitations",
+    "Limitation",
+    "Characteristics",
+    "Components",
+    "Structure",
+    "Definition",
+    "Introduction",
+    "Programming principles",
+    "Parameters",
+    "Instructions",
+    "Data",
+    "General",
+    "Evaluation and termination",
+    "Comments",
+    "Comments in a record",
+    "Late binding",
+    "Arithmetic expressions",
+    "Logical expressions",
+    "Stationary TCPs",
+}
+_S2 = {"Syntax", "Syntax rules", "Predefined data"}
+_S3 = {"Basic examples", "Basic example", "More examples", "Examples", "Example", "Type examples"}
+_SKIP = {
+    "Related information",
+    "Related Information",
+    "About this manual",
+    "Revisions",
+    "Prerequisites",
+    "Organization of chapters",
+    "Who should read this manual?",
+    "References",
+}
 
 
 def _classify(section: str) -> str | None:
@@ -159,9 +189,11 @@ def build_records_segmented(manuals: List[dict], chunk_chars: int = 1800, overla
                 for chunk_index, chunk in enumerate(chunks):
                     doc = (
                         f"Manual: ABB RAPID\n"
+                        f"Manual directory: {manual_name}\n"
                         f"Language: {language}\n"
                         f"Title: {title}\n"
-                        f"Section: {section}\n\n"
+                        f"Section: {section}\n"
+                        f"Source file: {rel_file}\n\n"
                         f"{chunk}"
                     )
                     ids.append(stable_id(language, manual_name, rel_file, section, str(section_instance), str(chunk_index)))
