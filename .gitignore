@@ -1,10 +1,12 @@
 .env
+.DS_Store
 rapid_docs/
 rapid_chroma_db/
 rapid_chroma_db_segmented/
+*.zip
+*.tar.gz
 *.rspak
 *.chm
 __pycache__/
 **/__pycache__/
 *.pyc
-

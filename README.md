@@ -35,12 +35,16 @@ extracted RobotWare documentation also includes `rapid_kernel` and
 Each HTML file is parsed using BeautifulSoup. The ABB manual uses a consistent
 `<span class="blocklabel">` structure to divide each instruction page into named
 sections (e.g. `Usage`, `Arguments`, `Basic examples`, `Syntax`). The parser
-extracts each section as an independent text block.
+extracts each section as an independent text block. Inline tags are joined with
+spaces so normal prose is not fragmented, while ABB RAPID code blocks inside
+`div.computerscripts` are preserved line by line.
 
 Long sections are then split into overlapping chunks:
 - Maximum **1800 characters** per chunk
 - **250 character overlap** between adjacent chunks
-- Split boundaries follow natural breaks: newline -> period -> semicolon (in priority order)
+- Split boundaries follow natural breaks: newline → period → semicolon (in priority order)
+- RAPID code blocks are detected and chunk boundaries are moved to avoid
+  splitting code in the middle when practical
 - Chunks shorter than 50 characters are discarded
 
 Each chunk is stored with metadata: instruction title, section name, source file,
@@ -52,7 +56,7 @@ All sections from all instruction pages are indexed into one flat collection,
 regardless of section type.
 
 ```bash
-python build_rapid_index.py \
+python3 build_rapid_index.py \
     --manual-root rapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation \
     --languages en
 ```
@@ -66,7 +70,7 @@ to a dedicated collection. This includes API reference pages, RAPID language
 kernel pages, and RAPID overview/programming principle pages.
 
 ```bash
-python build_rapid_index_segmented.py \
+python3 build_rapid_index_segmented.py \
     --manual-root rapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation \
     --languages en
 ```
@@ -95,13 +99,19 @@ Default manual directories:
 #### Original pipeline (single collection, vector only)
 
 ```bash
-python generate_rapid.py "move to pick position and close gripper"
+python3 generate_rapid.py "move to pick position and close gripper"
 ```
 
 #### Hybrid pipeline (segmented vector + BM25 keyword, merged via RRF)
 
 ```bash
-python generate_rapid_hybrid.py "move to pick position and close gripper"
+python3 generate_rapid_hybrid.py "move to pick position and close gripper"
+```
+
+Enable optional CrossEncoder reranking after hybrid retrieval:
+
+```bash
+python3 generate_rapid_hybrid.py "move to pick position and close gripper" --rerank
 ```
 
 Optional arguments:
@@ -112,6 +122,8 @@ Optional arguments:
 --top-k           number of chunks sent to LLM (default: 8)
 --candidate-k     candidates retrieved per retriever before merging (default: 18)
 --language        preferred manual language (default: en)
+--rerank          enable CrossEncoder reranking after hybrid retrieval
+--rerank-model    CrossEncoder model used with --rerank
 ```
 
 ---
@@ -120,16 +132,18 @@ Optional arguments:
 
 ```
 User query
-    |
-    |---> SegmentedRetriever (vector search across 3 collections)
-    |       bge-m3 embedding -> ChromaDB cosine similarity -> top candidates
-    |
-    |---> BM25Retriever (keyword search, built from HTML at startup, no DB required)
-    |       exact term matching -> top candidates
-    |
-    `---> RRF Fusion (Reciprocal Rank Fusion, rank-based merge)
-            |
-            `---> top chunks -> DeepSeek LLM -> RAPID module output
+    │
+    ├─► SegmentedRetriever (vector search across 3 collections)
+    │       bge-m3 embedding → ChromaDB cosine similarity → top-12 candidates
+    │
+    ├─► BM25Retriever (keyword search, built from HTML at startup, no DB required)
+    │       exact term matching → top-12 candidates
+    │
+    └─► RRF Fusion (Reciprocal Rank Fusion, rank-based merge)
+            │
+            ├─► Optional CrossEncoder reranker (--rerank)
+            │
+            └─► top-6 chunks → DeepSeek LLM → RAPID module output
 ```
 
 RRF score formula: `score(d) = sum(weight / (60 + rank(d)))` across all
@@ -150,11 +164,13 @@ rapid_rag/
   loaders.py          Discover HTML manual files from extracted CHM directories
   parser.py           Parse ABB HTML manual structure (blocklabel sections)
   chunker.py          Text splitting, stable ID generation, segment classification
+  code_detector.py    RAPID code-block detection for safer chunk boundaries
   embeddings.py       Load BAAI/bge-m3 multilingual embedding model
   vectorstore.py      ChromaDB collection creation and batch write
   retriever.py        RapidRetriever (single collection) + SegmentedRetriever (3 collections)
   bm25_retriever.py   BM25 keyword retriever built on-the-fly from HTML files
   hybrid_retriever.py RRF fusion of vector and BM25 results
+  reranker.py         Optional CrossEncoder reranking for retrieved chunks
   prompts.py          LLM prompt construction from retrieved context
 ```
 
