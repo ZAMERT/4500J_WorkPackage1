@@ -3,8 +3,51 @@ import re
 from pathlib import Path
 from typing import List
 
+from .code_detector import find_code_blocks
 from .loaders import html_files
 from .parser import html_to_sections, parse_toc
+
+
+def _code_block_at(pos: int, code_blocks: list[tuple[int, int]]) -> tuple[int, int] | None:
+    for block_start, block_end in code_blocks:
+        if block_start < pos < block_end:
+            return block_start, block_end
+    return None
+
+
+def _safe_chunk_end(
+    text: str,
+    start: int,
+    end: int,
+    max_chars: int,
+    code_blocks: list[tuple[int, int]],
+) -> int:
+    block = _code_block_at(end, code_blocks)
+    if not block:
+        return end
+
+    block_start, block_end = block
+    min_useful_end = start + max_chars // 2
+
+    if block_start > min_useful_end:
+        return block_start
+    if block_end - start <= max_chars + max_chars // 2:
+        return block_end
+    return end
+
+
+def _safe_next_start(start: int, end: int, overlap: int, code_blocks: list[tuple[int, int]]) -> int:
+    next_start = max(0, end - overlap)
+    block = _code_block_at(next_start, code_blocks)
+    if not block:
+        return next_start
+
+    block_start, block_end = block
+    if block_start > start:
+        return block_start
+    if block_end > start:
+        return block_end
+    return next_start
 
 
 def split_text(text: str, max_chars: int = 1800, overlap: int = 250) -> List[str]:
@@ -12,6 +55,7 @@ def split_text(text: str, max_chars: int = 1800, overlap: int = 250) -> List[str
     if len(text) <= max_chars:
         return [text] if len(text) >= 50 else []
 
+    code_blocks = find_code_blocks(text)
     chunks = []
     start = 0
     while start < len(text):
@@ -20,12 +64,13 @@ def split_text(text: str, max_chars: int = 1800, overlap: int = 250) -> List[str
             boundary = max(text.rfind("\n", start, end), text.rfind(". ", start, end), text.rfind(";", start, end))
             if boundary > start + max_chars // 2:
                 end = boundary + 1
+            end = _safe_chunk_end(text, start, end, max_chars, code_blocks)
         chunk = text[start:end].strip()
         if len(chunk) >= 100:
             chunks.append(chunk)
         if end >= len(text):
             break
-        start = max(0, end - overlap)
+        start = _safe_next_start(start, end, overlap, code_blocks)
     return chunks
 
 

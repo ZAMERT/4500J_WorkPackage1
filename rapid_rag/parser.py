@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 
 def clean_text(text: str) -> str:
@@ -12,8 +12,84 @@ def clean_text(text: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def clean_inline_text(text: str) -> str:
+    text = html.unescape(text).replace("\xa0", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+([,.;:!?])", r"\1", text)
+
+
 def node_text(node: Tag) -> str:
-    return clean_text(node.get_text("\n", strip=True))
+    return clean_inline_text(node.get_text(" ", strip=True))
+
+
+def code_lines(node: Tag) -> List[str]:
+    lines = []
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            text = clean_inline_text(str(child))
+            if text:
+                lines.append(text)
+            continue
+        if not isinstance(child, Tag):
+            continue
+        if "computerscripts" in child.get("class", []):
+            lines.extend(code_lines(child))
+        elif child.name == "p":
+            text = node_text(child)
+            if text:
+                lines.append(text)
+        else:
+            lines.extend(code_lines(child))
+    return lines
+
+
+def table_lines(node: Tag) -> List[str]:
+    lines = []
+    for row in node.find_all("tr"):
+        cells = [node_text(cell) for cell in row.find_all(["td", "th"], recursive=False)]
+        cells = [cell for cell in cells if cell]
+        if cells:
+            lines.append(" | ".join(cells))
+    return lines
+
+
+def block_lines(node: Tag) -> List[str]:
+    lines = []
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            text = clean_inline_text(str(child))
+            if text:
+                lines.append(text)
+            continue
+        if not isinstance(child, Tag):
+            continue
+
+        classes = child.get("class", [])
+        if "computerscripts" in classes:
+            lines.extend(code_lines(child))
+        elif "titled-block-title" in classes:
+            text = node_text(child)
+            if text:
+                lines.append(text)
+        elif child.name == "p":
+            text = node_text(child)
+            if text:
+                lines.append(text)
+        elif child.name == "table":
+            lines.extend(table_lines(child))
+        elif child.name in {"div", "section"}:
+            lines.extend(block_lines(child))
+        elif child.name == "br":
+            continue
+        else:
+            text = node_text(child)
+            if text:
+                lines.append(text)
+    return lines
+
+
+def body_text(node: Tag) -> str:
+    return "\n".join(line for line in block_lines(node) if line)
 
 
 def parse_toc(toc_file: Path) -> Dict[str, str]:
@@ -66,7 +142,7 @@ def section_rows(soup: BeautifulSoup) -> Iterable[tuple[str, str]]:
         if len(cells) < 2:
             continue
         section = node_text(label)
-        body = node_text(cells[1])
+        body = body_text(cells[1])
         if section and body:
             yield section, body
 

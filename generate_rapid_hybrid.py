@@ -9,6 +9,7 @@ from rapid_rag.embeddings import DEFAULT_EMBEDDING_MODEL
 from rapid_rag.hybrid_retriever import HybridRetriever
 from rapid_rag.loaders import DEFAULT_DOC_DIRS, DEFAULT_MANUAL_ROOT, discover_manual_dirs
 from rapid_rag.prompts import rapid_generation_prompt
+from rapid_rag.reranker import DEFAULT_RERANK_MODEL, rerank
 
 load_dotenv()
 
@@ -31,6 +32,8 @@ def parse_args():
     parser.add_argument("--candidate-k", type=int, default=12)
     parser.add_argument("--vector-weight", type=float, default=1.0)
     parser.add_argument("--bm25-weight", type=float, default=1.0)
+    parser.add_argument("--rerank", action="store_true", help="Enable CrossEncoder reranking after hybrid retrieval")
+    parser.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL, help="CrossEncoder model used when --rerank is set")
     parser.add_argument("--model", default=DEFAULT_LLM_MODEL)
     return parser.parse_args()
 
@@ -53,6 +56,8 @@ def generate_rapid(
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     vector_weight: float = 1.0,
     bm25_weight: float = 1.0,
+    rerank_enabled: bool = False,
+    rerank_model: str = DEFAULT_RERANK_MODEL,
     llm_model: str = DEFAULT_LLM_MODEL,
 ) -> Tuple[str, List[dict]]:
     retriever = HybridRetriever(
@@ -64,11 +69,19 @@ def generate_rapid(
     )
     retrieved = retriever.retrieve(
         user_task,
-        top_k=top_k,
+        top_k=candidate_k if rerank_enabled else top_k,
         candidate_k=candidate_k,
         language=language,
         fallback_language=fallback_language,
     )
+    if rerank_enabled:
+        retrieved = rerank(
+            user_task,
+            retrieved,
+            top_k=top_k,
+            model_name=rerank_model,
+            enabled=True,
+        )
     prompt = rapid_generation_prompt(user_task, retrieved)
 
     response = make_llm_client().chat.completions.create(
@@ -116,6 +129,8 @@ def main():
         embedding_model=args.embedding_model,
         vector_weight=args.vector_weight,
         bm25_weight=args.bm25_weight,
+        rerank_enabled=args.rerank,
+        rerank_model=args.rerank_model,
         llm_model=args.model,
     )
 
@@ -126,10 +141,17 @@ def main():
     for index, item in enumerate(retrieved, start=1):
         meta = item.get("metadata") or {}
         seg = meta.get("segment", "-")
-        rrf = item.get("rrf_score", "-")
+        rrf = item.get("rrf_score")
+        rerank_score = item.get("rerank_score")
+        scores = []
+        if rrf is not None:
+            scores.append(f"rrf={rrf:.4f}")
+        if rerank_score is not None:
+            scores.append(f"rerank={rerank_score:.4f}")
+        score_text = " | ".join(scores) if scores else "score=-"
         print(
             f"{index}. [{seg}] {meta.get('title')} | {meta.get('section')} | "
-            f"file={meta.get('file')} | rrf={rrf:.4f}"
+            f"file={meta.get('file')} | {score_text}"
         )
 
 
