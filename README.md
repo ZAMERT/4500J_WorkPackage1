@@ -22,7 +22,9 @@ unzip ABB.RobotWareDoc.OmniCore-7.10.rspak -d rapid_docs
     -orapid_docs/ABB.RobotWareDoc.OmniCore-7.10/Documentation/en/rapid_manual_html
 ```
 
-This produces 669 HTML files, one per RAPID instruction or data type.
+This produces 669 HTML files, one per RAPID instruction or data type. The
+extracted RobotWare documentation also includes `rapid_kernel` and
+`rapid_overview`, which are indexed by default in the segmented pipeline.
 
 ---
 
@@ -38,11 +40,11 @@ extracts each section as an independent text block.
 Long sections are then split into overlapping chunks:
 - Maximum **1800 characters** per chunk
 - **250 character overlap** between adjacent chunks
-- Split boundaries follow natural breaks: newline → period → semicolon (in priority order)
+- Split boundaries follow natural breaks: newline -> period -> semicolon (in priority order)
 - Chunks shorter than 50 characters are discarded
 
 Each chunk is stored with metadata: instruction title, section name, source file,
-language, and document version.
+language, source manual directory, and document version.
 
 #### Option A — Original (single collection)
 
@@ -60,8 +62,8 @@ Output: `rapid_chroma_db/` — collection `rapid_manual`
 #### Option B — Segmented (three collections, recommended)
 
 Before indexing, each section is classified by its `blocklabel` type and routed
-to a dedicated collection. This allows the retriever to query the right segment
-depending on what information is needed.
+to a dedicated collection. This includes API reference pages, RAPID language
+kernel pages, and RAPID overview/programming principle pages.
 
 ```bash
 python build_rapid_index_segmented.py \
@@ -73,12 +75,18 @@ Output: `rapid_chroma_db_segmented/` — three collections:
 
 | Collection | Blocklabel sections indexed |
 |---|---|
-| `rapid_definitions` | Usage, Arguments, Program execution, Error handling, Return value, Description, Limitations |
-| `rapid_syntax` | Syntax, Predefined data |
-| `rapid_examples` | Basic examples, Basic example, More examples, Examples |
+| `rapid_definitions` | Usage, Arguments, Program execution, Error handling, Return value, Description, Definition, Introduction, Programming principles, Parameters, Instructions, Data, General, Limitations |
+| `rapid_syntax` | Syntax, Syntax rules, Predefined data |
+| `rapid_examples` | Basic examples, Basic example, More examples, Examples, Example |
 
-Sections such as `Related information` are skipped entirely as they contain no
-actionable content.
+Sections such as `Related information`, `References`, and `About this manual`
+are skipped entirely as they contain little actionable code generation content.
+
+Default manual directories:
+
+- `rapid_manual_html` — RAPID instruction/function/data type reference
+- `rapid_kernel` — RAPID language core semantics
+- `rapid_overview` — programming principles, motion concepts, coordinate systems, and execution model
 
 ---
 
@@ -101,8 +109,8 @@ Optional arguments:
 ```
 --vector-weight   weight of vector retrieval in RRF merge (default: 1.0)
 --bm25-weight     weight of BM25 retrieval in RRF merge (default: 1.0)
---top-k           number of chunks sent to LLM (default: 6)
---candidate-k     candidates retrieved per retriever before merging (default: 12)
+--top-k           number of chunks sent to LLM (default: 8)
+--candidate-k     candidates retrieved per retriever before merging (default: 18)
 --language        preferred manual language (default: en)
 ```
 
@@ -112,21 +120,21 @@ Optional arguments:
 
 ```
 User query
-    │
-    ├─► SegmentedRetriever (vector search across 3 collections)
-    │       bge-m3 embedding → ChromaDB cosine similarity → top-12 candidates
-    │
-    ├─► BM25Retriever (keyword search, built from HTML at startup, no DB required)
-    │       exact term matching → top-12 candidates
-    │
-    └─► RRF Fusion (Reciprocal Rank Fusion, rank-based merge)
-            │
-            └─► top-6 chunks → DeepSeek LLM → RAPID module output
+    |
+    |---> SegmentedRetriever (vector search across 3 collections)
+    |       bge-m3 embedding -> ChromaDB cosine similarity -> top candidates
+    |
+    |---> BM25Retriever (keyword search, built from HTML at startup, no DB required)
+    |       exact term matching -> top candidates
+    |
+    `---> RRF Fusion (Reciprocal Rank Fusion, rank-based merge)
+            |
+            `---> top chunks -> DeepSeek LLM -> RAPID module output
 ```
 
-RRF score formula: `score(d) = Σ weight / (60 + rank(d))` across all retrievers.
-Equal weights by default; `--bm25-weight` can be raised for queries containing
-exact RAPID instruction names (e.g. `MoveL`, `WaitDI`, `SetDO`).
+RRF score formula: `score(d) = sum(weight / (60 + rank(d)))` across all
+retrievers. Equal weights by default; `--bm25-weight` can be raised for queries
+containing exact RAPID instruction names (e.g. `MoveL`, `WaitDI`, `SetDO`).
 
 ---
 
