@@ -1,19 +1,18 @@
 import argparse
-import os
+import json
 from typing import List, Tuple
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
+from rapid_rag.agent import generate_with_closed_loop
 from rapid_rag.embeddings import DEFAULT_EMBEDDING_MODEL
-from rapid_rag.prompts import rapid_generation_prompt
+from rapid_rag.llm import DEFAULT_LLM_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_THINKING
 from rapid_rag.retriever import RapidRetriever
 
 load_dotenv()
 
 DEFAULT_DB_DIR = "rapid_chroma_db"
 DEFAULT_COLLECTION = "rapid_manual"
-DEFAULT_LLM_MODEL = "deepseek-chat"
 
 
 def parse_args():
@@ -27,14 +26,11 @@ def parse_args():
     parser.add_argument("--top-k", type=int, default=6, help="Number of chunks sent to the LLM")
     parser.add_argument("--candidate-k", type=int, default=12, help="Number of candidates retrieved before trimming")
     parser.add_argument("--model", default=DEFAULT_LLM_MODEL, help="LLM model name")
+    parser.add_argument("--thinking", choices=["enabled", "disabled"], default=DEFAULT_THINKING)
+    parser.add_argument("--reasoning-effort", choices=["high", "max"], default=DEFAULT_REASONING_EFFORT)
+    parser.add_argument("--max-loop", type=int, default=2, help="Maximum repair loops after the initial generation")
+    parser.add_argument("--show-trace", action="store_true", help="Print closed-loop debug trace")
     return parser.parse_args()
-
-
-def make_llm_client() -> OpenAI:
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise RuntimeError("DEEPSEEK_API_KEY is not set in the environment or .env file.")
-    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
 
 def generate_rapid(
@@ -47,30 +43,25 @@ def generate_rapid(
     collection: str = DEFAULT_COLLECTION,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     llm_model: str = DEFAULT_LLM_MODEL,
-) -> Tuple[str, List[dict]]:
+    thinking: str = DEFAULT_THINKING,
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    max_loop: int = 2,
+) -> Tuple[str, List[dict], dict]:
     retriever = RapidRetriever(db_dir, collection, embedding_model)
-    retrieved = retriever.retrieve(
-        user_task,
-        top_k=top_k,
-        candidate_k=candidate_k,
-        language=language,
-        fallback_language=fallback_language,
+    return generate_with_closed_loop(
+        user_task=user_task,
+        retrieve_fn=lambda query: retriever.retrieve(
+            query,
+            top_k=top_k,
+            candidate_k=candidate_k,
+            language=language,
+            fallback_language=fallback_language,
+        ),
+        llm_model=llm_model,
+        thinking=thinking,
+        reasoning_effort=reasoning_effort,
+        max_loop=max_loop,
     )
-    prompt = rapid_generation_prompt(user_task, retrieved)
-
-    response = make_llm_client().chat.completions.create(
-        model=llm_model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You generate ABB RAPID code. Be precise and avoid hallucinating APIs.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.1,
-    )
-
-    return response.choices[0].message.content, retrieved
 
 
 def default_task() -> str:
@@ -87,7 +78,7 @@ Generate RAPID code for an ABB robot:
 def main():
     args = parse_args()
     task = " ".join(args.task).strip() or default_task()
-    code, retrieved = generate_rapid(
+    code, retrieved, trace = generate_rapid(
         task,
         language=args.language,
         fallback_language=args.fallback_language,
@@ -97,6 +88,9 @@ def main():
         collection=args.collection,
         embedding_model=args.embedding_model,
         llm_model=args.model,
+        thinking=args.thinking,
+        reasoning_effort=args.reasoning_effort,
+        max_loop=args.max_loop,
     )
 
     print("===== Generated RAPID =====")
@@ -109,6 +103,10 @@ def main():
             f"{index}. {metadata.get('language')} | {metadata.get('title')} | "
             f"{metadata.get('section')} | {metadata.get('file')} | distance={item.get('distance')}"
         )
+
+    if args.show_trace:
+        print("\n===== Closed-loop Trace =====")
+        print(json.dumps(trace, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
