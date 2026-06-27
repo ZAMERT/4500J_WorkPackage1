@@ -10,3 +10,4 @@ rapid_chroma_db_segmented/
 __pycache__/
 **/__pycache__/
 *.pyc
+tests/

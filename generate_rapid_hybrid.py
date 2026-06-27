@@ -1,20 +1,19 @@
 import argparse
-import os
+import json
 from typing import List, Tuple
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
+from rapid_rag.agent import generate_with_closed_loop
 from rapid_rag.embeddings import DEFAULT_EMBEDDING_MODEL
 from rapid_rag.hybrid_retriever import HybridRetriever
+from rapid_rag.llm import DEFAULT_LLM_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_THINKING
 from rapid_rag.loaders import DEFAULT_DOC_DIRS, DEFAULT_MANUAL_ROOT, discover_manual_dirs
-from rapid_rag.prompts import rapid_generation_prompt
 from rapid_rag.reranker import DEFAULT_RERANK_MODEL, rerank
 
 load_dotenv()
 
 DEFAULT_DB_DIR = "rapid_chroma_db_segmented"
-DEFAULT_LLM_MODEL = "deepseek-chat"
 DEFAULT_TOP_K = 8
 DEFAULT_CANDIDATE_K = 18
 
@@ -37,14 +36,11 @@ def parse_args():
     parser.add_argument("--rerank", action="store_true", help="Enable CrossEncoder reranking after hybrid retrieval")
     parser.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL, help="CrossEncoder model used when --rerank is set")
     parser.add_argument("--model", default=DEFAULT_LLM_MODEL)
+    parser.add_argument("--thinking", choices=["enabled", "disabled"], default=DEFAULT_THINKING)
+    parser.add_argument("--reasoning-effort", choices=["high", "max"], default=DEFAULT_REASONING_EFFORT)
+    parser.add_argument("--max-loop", type=int, default=2)
+    parser.add_argument("--show-trace", action="store_true")
     return parser.parse_args()
-
-
-def make_llm_client() -> OpenAI:
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise RuntimeError("DEEPSEEK_API_KEY is not set in the environment or .env file.")
-    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
 
 def generate_rapid(
@@ -61,7 +57,10 @@ def generate_rapid(
     rerank_enabled: bool = False,
     rerank_model: str = DEFAULT_RERANK_MODEL,
     llm_model: str = DEFAULT_LLM_MODEL,
-) -> Tuple[str, List[dict]]:
+    thinking: str = DEFAULT_THINKING,
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    max_loop: int = 2,
+) -> Tuple[str, List[dict], dict]:
     retriever = HybridRetriever(
         db_dir=db_dir,
         manuals=manuals or [],
@@ -69,33 +68,35 @@ def generate_rapid(
         vector_weight=vector_weight,
         bm25_weight=bm25_weight,
     )
-    retrieved = retriever.retrieve(
-        user_task,
-        top_k=candidate_k if rerank_enabled else top_k,
-        candidate_k=candidate_k,
-        language=language,
-        fallback_language=fallback_language,
-    )
-    if rerank_enabled:
-        retrieved = rerank(
-            user_task,
-            retrieved,
-            top_k=top_k,
-            model_name=rerank_model,
-            enabled=True,
+    
+    def retrieve_for_generation(query: str):
+        retrieved = retriever.retrieve(
+            query, 
+            top_k=candidate_k if rerank_enabled else top_k,
+            candidate_k=candidate_k,
+            language=language,
+            fallback_language=fallback_language,
         )
-    prompt = rapid_generation_prompt(user_task, retrieved)
+        
+        if rerank_enabled:
+            retrieved = rerank(
+                query,
+                retrieved,
+                top_k=top_k,
+                model_name=rerank_model,
+                enabled=True,
+            )
 
-    response = make_llm_client().chat.completions.create(
-        model=llm_model,
-        messages=[
-            {"role": "system", "content": "You generate ABB RAPID code. Be precise and avoid hallucinating APIs."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.1,
+        return retrieved 
+    
+    return generate_with_closed_loop(
+        user_task=user_task,
+        retrieve_fn=retrieve_for_generation,
+        llm_model=llm_model,
+        thinking=thinking,
+        reasoning_effort=reasoning_effort,
+        max_loop=max_loop,
     )
-
-    return response.choices[0].message.content, retrieved
 
 
 def default_task() -> str:
@@ -120,7 +121,7 @@ def main():
         manual_dir=args.manual_dir,
     )
 
-    code, retrieved = generate_rapid(
+    code, retrieved, trace = generate_rapid(
         task,
         db_dir=args.db_dir,
         manuals=manuals,
@@ -134,6 +135,9 @@ def main():
         rerank_enabled=args.rerank,
         rerank_model=args.rerank_model,
         llm_model=args.model,
+        thinking=args.thinking,
+        reasoning_effort=args.reasoning_effort,
+        max_loop=args.max_loop,
     )
 
     print("===== Generated RAPID =====")
@@ -155,6 +159,10 @@ def main():
                 f"{index}. [{seg}] {meta.get('manual')} | {meta.get('title')} | {meta.get('section')} | "
                 f"file={meta.get('file')} | {score_text}"
         )
+
+    if args.show_trace:
+        print("\n===== Closed-loop Trace =====")
+        print(json.dumps(trace, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

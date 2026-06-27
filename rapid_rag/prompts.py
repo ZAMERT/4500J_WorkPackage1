@@ -22,6 +22,11 @@ You are an expert ABB RAPID programmer.
 
 Generate valid ABB RAPID code for the user's requirement.
 
+Agent engineering policy:
+- Work as a closed-loop code generator: infer the required RAPID operations, ground each operation in retrieved manual evidence, then internally review the complete module before output.
+- Prefer boring, verifiable RAPID over clever code. If evidence is thin, preserve correctness with a RAPID TODO comment instead of guessing.
+- Treat the retrieved context as your current working memory. Do not rely on unsupported API memory when syntax or argument order matters.
+
 Evidence policy:
 - Use the retrieved RAPID manual context as the source of truth for instruction names, functions, data types, argument order, and required arguments.
 - Prefer evidence from sections named Syntax, Arguments, Usage, Basic examples, More examples, Description, Definition, and Programming principles.
@@ -57,3 +62,50 @@ Retrieved RAPID manual context:
 User requirement:
 {user_task}
 """.strip()
+
+
+def rapid_repair_prompt(
+    user_task: str,
+    previous_code: str,
+    validation_issues: list[str],
+    retrieved: list[dict],
+) -> str:
+    context_text = build_context(retrieved)
+    issue_text = "\n".join(f"- {issue}" for issue in validation_issues) or "- No explicit validator issues."
+    return f"""
+You are an expert ABB RAPID programmer repairing generated RAPID code.
+
+Repair the previous code so it satisfies the user's requirement and the validator issues.
+
+Closed-loop repair policy:
+- Use the retrieved RAPID manual context as the source of truth for instruction names, functions, data types, argument order, and required arguments.
+- Check MODULE/ENDMODULE, PROC/ENDPROC, END statements, separators, required arguments, and data declarations.
+- Remove Markdown fences, Python, pseudocode, and prose outside RAPID comments.
+- If a RAPID instruction, data type, argument, I/O signal, target, tool, workobject, speed, or zone cannot be verified from the retrieved context or user request, keep the code valid and add a concise RAPID TODO comment.
+- Do not fabricate coordinates, joint values, tool geometry, payload data, workobject frames, or signal names.
+- Prefer a complete MODULE with PROC main() unless the user asked for a different routine shape.
+
+Output policy:
+- Output the repaired complete RAPID code only.
+- Do not output Markdown fences or explanations outside RAPID comments.
+
+Validator issues:
+{issue_text}
+
+Retrieved RAPID manual context:
+{context_text}
+
+User requirement:
+{user_task}
+
+Previous code:
+{previous_code}
+""".strip()
+
+
+def rapid_repair_query(user_task: str, validation_issues: list[str]) -> str:
+    issue_text = " ".join(validation_issues)
+    return (
+        f"{user_task} RAPID Syntax Arguments Usage Basic examples More examples "
+        f"repair validation issues {issue_text}"
+    ).strip()
