@@ -22,42 +22,40 @@ The older single-collection vector pipeline is still kept as a baseline.
 
 ```text
 build_rapid_index.py
-  Build the baseline single-collection ChromaDB index.
+    - Build the baseline single-collection ChromaDB index.
 
 build_rapid_index_segmented.py
-  Build the recommended segmented ChromaDB index.
+    - Build the recommended segmented ChromaDB index.
 
 generate_rapid.py
-  Generate RAPID code with the baseline vector-only retriever.
+    - Generate RAPID code with the baseline vector-only retriever.
 
 generate_rapid_hybrid.py
-  Generate RAPID code with segmented vector retrieval + BM25 + RRF.
+    - Generate RAPID code with segmented vector retrieval + BM25 + RRF.
 
 rapid_rag/
-  loaders.py
-    Locate extracted manual HTML directories.
-  parser.py
-    Parse ABB HTML pages into blocklabel-based sections.
-  chunker.py
-    Split sections into chunks, classify sections into retrieval segments,
-    and generate stable document IDs.
-  code_detector.py
-    Detect RAPID-like code blocks so chunking avoids splitting code when
-    practical.
-  embeddings.py
-    Load the SentenceTransformers embedding model.
-  vectorstore.py
-    Create/open ChromaDB collections and batch-write embeddings.
-  retriever.py
-    Baseline vector retriever and segmented vector retriever.
-  bm25_retriever.py
-    Build an in-memory BM25 keyword index directly from extracted HTML.
-  hybrid_retriever.py
-    Merge vector and BM25 results with Reciprocal Rank Fusion.
-  reranker.py
-    Optional CrossEncoder reranking after hybrid retrieval.
-  prompts.py
-    Build the RAPID generation prompt from retrieved manual context.
+    loaders.py
+        - Locate extracted manual HTML directories.
+    parser.py
+        - Parse ABB HTML pages into blocklabel-based sections.
+    chunker.py
+        - Split sections into chunks, classify sections into retrieval segments, and generate stable document IDs.
+    code_detector.py
+        - Detect RAPID-like code blocks so chunking avoids splitting code when practical.
+    embeddings.py
+        - Load the SentenceTransformers embedding model.
+    vectorstore.py
+        - Create/open ChromaDB collections and batch-write embeddings.
+    retriever.py
+        - Baseline vector retriever and segmented vector retriever.
+    bm25_retriever.py
+        - Build an in-memory BM25 keyword index directly from extracted HTML.
+    hybrid_retriever.py
+        - Merge vector and BM25 results with Reciprocal Rank Fusion.
+    reranker.py
+        - Optional CrossEncoder reranking after hybrid retrieval.
+    prompts.py
+        - Build the RAPID generation prompt from retrieved manual context.
 ```
 
 Generated/local data is intentionally ignored by git:
