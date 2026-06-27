@@ -9,7 +9,6 @@ from rapid_rag.embeddings import DEFAULT_EMBEDDING_MODEL
 from rapid_rag.hybrid_retriever import HybridRetriever
 from rapid_rag.llm import DEFAULT_LLM_MODEL, DEFAULT_REASONING_EFFORT, DEFAULT_THINKING
 from rapid_rag.loaders import DEFAULT_DOC_DIRS, DEFAULT_MANUAL_ROOT, discover_manual_dirs
-from rapid_rag.prompts import rapid_generation_prompt
 from rapid_rag.reranker import DEFAULT_RERANK_MODEL, rerank
 
 load_dotenv()
@@ -81,7 +80,7 @@ def generate_rapid(
         
         if rerank_enabled:
             retrieved = rerank(
-                user_task,
+                query,
                 retrieved,
                 top_k=top_k,
                 model_name=rerank_model,
