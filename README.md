@@ -353,3 +353,43 @@ doc_version
   fabricating data.
 - Local manual files, ChromaDB indexes, `.env`, caches, and tests are ignored by
   `.gitignore` in this working copy.
+
+## Local llama.cpp Integration
+
+Run RAPID generation against a local `llama.cpp` server instead of DeepSeek.
+Assumes a sibling checkout of `llama-infer-opt` at `../llama-infer-opt`.
+
+Build `llama-server` and download a model:
+
+```bash
+./build_llama.sh --with-model
+```
+
+Options:
+
+```text
+--with-model     build, then download the default model
+--model-only     skip build, only download
+BACKEND=cuda|metal|cpu   override backend detection
+TARGETS=llama-server     build only the server target
+MODELS_DIR=./models      change model download destination
+```
+
+Start the llama server and enter a REPL that runs hybrid RAG per prompt:
+
+```bash
+# find the downloaded gguf (skip mmproj-* which is the vision projector)
+ls $HOME/models/qwen25vl/*.gguf | grep -v mmproj
+
+python3 run_rapid_llama.py \
+  --llama-server ../llama-infer-opt/build/bin/llama-server \
+  --model $HOME/models/qwen25vl/<file>.gguf \
+  --llama-extra "-c 8192 -ngl 99"
+```
+
+Defaults: host `127.0.0.1`, port `8080`. Override with `--port` if it is
+already in use.
+
+The BM25 index and vector store are loaded once at startup, so subsequent prompts skip the HTML rescan. Type a task, press Enter, and the
+generated RAPID plus retrieved sources are printed. Type `:quit` to exit;
+the llama server is stopped automatically.

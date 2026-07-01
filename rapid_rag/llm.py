@@ -30,11 +30,14 @@ def normalize_deepseek_options(model: str, thinking: str) -> tuple[str, str]:
 
 
 class DeepSeekLLM:
-    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.deepseek.com"):
-        api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-        if not api_key:
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        base_url = base_url or os.getenv("OPENAI_BASE_URL") or "https://api.deepseek.com"
+        self.base_url = base_url
+        self.is_deepseek = "deepseek.com" in base_url
+        api_key = api_key or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+        if self.is_deepseek and not api_key:
             raise RuntimeError("DEEPSEEK_API_KEY is not set in the environment or .env file.")
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(api_key=api_key or "dummy", base_url=base_url)
 
     def complete(
         self,
@@ -44,11 +47,8 @@ class DeepSeekLLM:
         reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     ) -> LLMResult:
         resolved_model, resolved_thinking = normalize_deepseek_options(model, thinking)
-        extra_body = {"thinking": {"type": resolved_thinking}}
-        if resolved_thinking == "enabled":
-            extra_body["reasoning_effort"] = reasoning_effort
 
-        response = self.client.chat.completions.create(
+        create_kwargs = dict(
             model=resolved_model,
             messages=[
                 {
@@ -57,8 +57,14 @@ class DeepSeekLLM:
                 },
                 {"role": "user", "content": prompt},
             ],
-            extra_body=extra_body,
         )
+        if self.is_deepseek:
+            extra_body = {"thinking": {"type": resolved_thinking}}
+            if resolved_thinking == "enabled":
+                extra_body["reasoning_effort"] = reasoning_effort
+            create_kwargs["extra_body"] = extra_body
+
+        response = self.client.chat.completions.create(**create_kwargs)
         message = response.choices[0].message
         return LLMResult(
             content=message.content or "",
