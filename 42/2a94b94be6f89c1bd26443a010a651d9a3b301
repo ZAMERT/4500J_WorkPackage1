@@ -1,0 +1,16 @@
+.gitignore
+  h_ff783e8cf4091e 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "422a94b94be6f89c1bd26443a010a651d9a3b301",
+  "prompts": {},
+  "humans": {
+    "h_ff783e8cf4091e": {
+      "author": "xupeiyu <xupeiyu@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
